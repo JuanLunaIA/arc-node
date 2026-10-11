@@ -292,4 +292,63 @@ mod tests {
             .unwrap();
         assert!(!result.is_valid());
     }
+
+
+    // T-1 PoC: ArcSigningProvider::verify_signed_vote_extension should panic with unreachable!
+    // when called through the enum dispatch, even though LocalSigningProvider implements it correctly.
+    // This demonstrates the latent chain-halt vulnerability.
+    #[tokio::test]
+    #[should_panic(expected = "Vote extensions are not supported in Arc at the moment")]
+    async fn t1_arc_signing_provider_verify_vote_extension_panics() {
+        use super::*;
+        use arc_consensus_types::{Address, BlockHash, Height, ValueId};
+        use malachitebft_core_types::Round;
+        
+        let private_key = PrivateKey::generate(rand::thread_rng());
+        let provider = ArcSigningProvider::Local(LocalSigningProvider::new(private_key));
+        
+        let scope = VoteExtensionScope::new(
+            Height::new(7),
+            Round::new(2),
+            ValueId::new(BlockHash::repeat_byte(0xAB)),
+            Address::repeat_byte(0x01),
+        );
+        
+        let extension = Bytes::from_static(b"test extension");
+        let pubkey = provider.public_key();
+        
+        // This should panic with unreachable!
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            provider.verify_signed_vote_extension(&scope, &extension, &Signature::default(), &pubkey).await
+        });
+    }
+
+    // T-1 PoC: ArcSigningProvider::sign_vote_extension should also panic
+    #[tokio::test]
+    #[should_panic(expected = "Vote extensions are not supported in Arc at the moment")]
+    async fn t1_arc_signing_provider_sign_vote_extension_panics() {
+        use super::*;
+        use arc_consensus_types::{Address, BlockHash, Height, ValueId};
+        use malachitebft_core_types::Round;
+        
+        let private_key = PrivateKey::generate(rand::thread_rng());
+        let provider = ArcSigningProvider::Local(LocalSigningProvider::new(private_key));
+        
+        let scope = VoteExtensionScope::new(
+            Height::new(7),
+            Round::new(2),
+            ValueId::new(BlockHash::repeat_byte(0xAB)),
+            Address::repeat_byte(0x01),
+        );
+        
+        let extension = Bytes::from_static(b"test extension");
+        
+        // This should panic with unreachable!
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            provider.sign_vote_extension(scope, extension).await
+        });
+    }
+
 }
