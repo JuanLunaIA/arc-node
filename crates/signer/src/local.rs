@@ -294,9 +294,10 @@ mod tests {
     }
 
 
-    // T-1 PoC: ArcSigningProvider::verify_signed_vote_extension should panic with unreachable!
-    // when called through the enum dispatch, even though LocalSigningProvider implements it correctly.
-    // This demonstrates the latent chain-halt vulnerability.
+    // T-1 PoC: ArcSigningProvider::verify_signed_vote_extension panics with unreachable!()
+    // when called through the enum dispatch, even though LocalSigningProvider implements it
+    // correctly. Demonstrates the latent chain-halt when HeightParams.vote_extension_policy
+    // resolves to a non-Disabled value.
     #[tokio::test]
     #[should_panic(expected = "Vote extensions are not supported in Arc at the moment")]
     async fn t1_arc_signing_provider_verify_vote_extension_panics() {
@@ -319,16 +320,13 @@ mod tests {
         let extension = Bytes::from_static(b"test extension");
         let sig = Signature::test();
 
-        // This should panic with unreachable!
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async {
-            let _ = provider
-                .verify_signed_vote_extension(&scope, &extension, &sig, &pubkey)
-                .await;
-        });
+        // Awaiting inside the tokio::test runtime reaches the unreachable!() arm.
+        let _ = provider
+            .verify_signed_vote_extension(&scope, &extension, &sig, &pubkey)
+            .await;
     }
 
-    // T-1 PoC: ArcSigningProvider::sign_vote_extension should also panic.
+    // T-1 PoC: ArcSigningProvider::sign_vote_extension also panics with unreachable!().
     #[tokio::test]
     #[should_panic(expected = "Vote extensions are not supported in Arc at the moment")]
     async fn t1_arc_signing_provider_sign_vote_extension_panics() {
@@ -348,10 +346,7 @@ mod tests {
 
         let extension = Bytes::from_static(b"test extension");
 
-        // This should panic with unreachable!
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async {
-            let _ = provider.sign_vote_extension(scope, extension).await;
-        });
+        // Awaiting inside the tokio::test runtime reaches the unreachable!() arm.
+        let _ = provider.sign_vote_extension(scope, extension).await;
     }
 }

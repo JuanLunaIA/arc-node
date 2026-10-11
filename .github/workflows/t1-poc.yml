@@ -30,28 +30,23 @@ jobs:
             target
           key: ${{ runner.os }}-t1-cargo-${{ hashFiles('**/Cargo.lock') }}
       
-      - name: Build arc-signer tests
-        run: cargo test -p arc-signer --features local --release --no-run 2>&1 | tail -20
-      
-      - name: Run T-1 PoC tests (capture panic)
+      - name: Run T-1 PoC tests (asserting panic)
         id: run_tests
         run: |
-          set +e
-          cargo test -p arc-signer t1_arc_signing_provider --features local --release -- --nocapture --test-threads=1 > /tmp/t1_output.txt 2>&1
-          EXIT=$?
-          echo "cargo test exit code: $EXIT"
-          echo "--- CAPTURED OUTPUT ---"
-          cat /tmp/t1_output.txt
-          echo "--- END OUTPUT ---"
+          set -o pipefail
+          # #[should_panic(expected="...")] means: test passes IFF the awaited call panics
+          # with exactly that message. A passing suite is the proof the arm is unreachable-guarded.
+          cargo test -p arc-signer t1_arc_signing_provider --features local --release -- --nocapture --test-threads=1 2>&1 | tee /tmp/t1_output.txt
         env:
           RUST_BACKTRACE: full
       
-      - name: Verify panic message present
+      - name: Confirm the panic string appears as an actual panic line
         run: |
-          if grep -q "Vote extensions are not supported in Arc at the moment" /tmp/t1_output.txt; then
-            echo "PASS: unreachable!() panic message captured"
+          # The real panic line, not the harness's "expected substring" echo.
+          if grep -E "panicked at.*signer/src/lib.rs|Vote extensions are not supported in Arc at the moment" /tmp/t1_output.txt | grep -v "expected substring"; then
+            echo "OK: panic reached ArcSigningProvider::*_vote_extension"
           else
-            echo "FAIL: panic message not found"
+            echo "FAIL: no genuine panic from ArcSigningProvider"
             exit 1
           fi
 
