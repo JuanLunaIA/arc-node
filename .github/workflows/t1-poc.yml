@@ -1,0 +1,121 @@
+name: T-1 PoC Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-t1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CARGO_BUILD_JOBS: 1
+      RUSTFLAGS: -C debuginfo=0 -C codegen-units=1
+      CARGO_INCREMENTAL: "0"
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Checkout Malachite
+        uses: actions/checkout@v4
+        with:
+          repository: JuanLunaIA/malachite
+          path: malachite
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Build arc-signer
+        run: cargo build -p arc-signer --lib --release
+      
+      - name: Build malachite test dependencies
+        run: |
+          cd malachite/code
+          cargo build -p arc-malachitebft-core-types -p arc-malachitebft-core-consensus -p arc-malachitebft-core-votekeeper -p arc-malachitebft-engine --lib --release
+      
+      - name: Run T-1 test - direct panic trigger
+        run: |
+          cat > /tmp/test_t1.rs << 'EOF'
+          use arc_consensus_types::{ArcContext, VoteExtensionScope, Address, Height, ValueId, BlockHash};
+          use malachitebft_signing_ed25519::PrivateKey;
+          use malachitebft_signing::{Signer, Verifier};
+          use bytes::Bytes;
+          use malachitebft_core_types::{Height, Round, ValueId, NilOrVal, VoteExtensionPolicy, HeightParams};
+          use malachitebft_signing_ed25519::Ed25519Signer;
+          use malachitebft_core_consensus::HeightParams;
+          use arc_signer::ArcSigningProvider;
+          
+          fn main() {
+              // Test 1: Direct call to ArcSigningProvider::verify_signed_vote_extension
+              let private_key = PrivateKey::generate(&mut rand::thread_rng());
+              let provider = arc_signer::ArcSigningProvider::new(private_key);
+              
+              let scope = VoteExtensionScope::new(
+                  malachitebft_core_types::Height::new(7),
+                  malachitebft_core_types::Round::new(2),
+                  malachitebft_core_types::ValueId::new(malachitebft_core_types::BlockHash::repeat_byte(0xAB)),
+                  malachitebft_core_types::Address::repeat_byte(0x01),
+              );
+              
+              let extension = bytes::Bytes::from_static(b"test extension");
+              let pubkey = provider.public_key();
+              
+              println!("Testing ArcSigningProvider::verify_signed_vote_extension with Required policy...");
+              
+              // This should panic with unreachable!
+              let rt = tokio::runtime::Runtime::new().unwrap();
+              let result = rt.block_on(async {
+                  provider.verify_signed_vote_extension(&scope, &extension, &malachitebft_signing_ed25519::Signature::default(), &pubkey).await
+              });
+              
+              println!("Result: {:?}", result);
+          }
+          EOF
+          
+          # Create a minimal test crate
+          mkdir -p /tmp/t1_test
+          cd /tmp/t1_test
+          cargo init --name t1_test --edition 2021
+          
+          # Add dependencies
+          cat >> Cargo.toml << 'EOF'
+          [dependencies]
+          arc-signer = { path = "/home/runner/work/arc-node/arc-node/crates/signer" }
+          arc-consensus-types = { path = "/home/runner/work/malachite/malachite/code/crates/types" }
+          malachitebft-core-types = { path = "/home/runner/work/malachite/malachite/code/crates/core-types" }
+          malachitebft-signing-ed25519 = { path = "/home/runner/work/malachite/malachite/code/crates/signing-ed25519" }
+          malachitebft-core-consensus = { path = "/home/runner/work/malachite/malachite/code/crates/core-consensus" }
+          malachitebft-signing = { path = "/home/runner/work/malachite/malachite/code/crates/signing" }
+          bytes = "1"
+          rand = "0.8"
+          tokio = { version = "1", features = ["full"] }
+          EOF
+          
+          cp /tmp/test_t1.rs src/main.rs
+          
+          cargo build --release
+          
+          echo "=== RUNNING T-1 TEST ==="
+          RUST_BACKTRACE=full cargo run --release 2>&1 || true
+        env:
+          RUST_BACKTRACE: full
+
+      - name: Upload panic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: t1-panic-logs
+          path: |
+            /tmp/t1_test/target/release/t1_test
+            /home/runner/work/**/target/release/deps/*
