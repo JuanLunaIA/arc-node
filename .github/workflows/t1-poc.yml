@@ -46,7 +46,32 @@ jobs:
       
       - name: Run T-1 test - direct panic trigger
         run: |
-          cat > /tmp/test_t1.rs << 'EOF'
+          # Create a minimal test crate
+          mkdir -p /tmp/t1_test
+          cd /tmp/t1_test
+          cargo init --name t1_test --edition 2021
+          
+          # Add dependencies - write Cargo.toml properly
+          cat > Cargo.toml << 'EOF'
+          [package]
+          name = "t1_test"
+          version = "0.1.0"
+          edition = "2021"
+          
+          [dependencies]
+          arc-signer = { path = "/home/runner/work/arc-node/arc-node/crates/signer" }
+          arc-consensus-types = { path = "/home/runner/work/malachite/malachite/code/crates/types" }
+          malachitebft-core-types = { path = "/home/runner/work/malachite/malachite/code/crates/core-types" }
+          malachitebft-signing-ed25519 = { path = "/home/runner/work/malachite/malachite/code/crates/signing-ed25519" }
+          malachitebft-core-consensus = { path = "/home/runner/work/malachite/malachite/code/crates/core-consensus" }
+          malachitebft-signing = { path = "/home/runner/work/malachite/malachite/code/crates/signing" }
+          bytes = "1"
+          rand = "0.8"
+          tokio = { version = "1", features = ["full"] }
+          EOF
+          
+          # Write the test source
+          cat > src/main.rs << 'EOF'
           use arc_consensus_types::{ArcContext, VoteExtensionScope, Address, Height, ValueId, BlockHash};
           use malachitebft_signing_ed25519::PrivateKey;
           use malachitebft_signing::{Signer, Verifier};
@@ -82,27 +107,6 @@ jobs:
               println!("Result: {:?}", result);
           }
           EOF
-          
-          # Create a minimal test crate
-          mkdir -p /tmp/t1_test
-          cd /tmp/t1_test
-          cargo init --name t1_test --edition 2021
-          
-          # Add dependencies
-          cat >> Cargo.toml << 'EOF'
-          [dependencies]
-          arc-signer = { path = "/home/runner/work/arc-node/arc-node/crates/signer" }
-          arc-consensus-types = { path = "/home/runner/work/malachite/malachite/code/crates/types" }
-          malachitebft-core-types = { path = "/home/runner/work/malachite/malachite/code/crates/core-types" }
-          malachitebft-signing-ed25519 = { path = "/home/runner/work/malachite/malachite/code/crates/signing-ed25519" }
-          malachitebft-core-consensus = { path = "/home/runner/work/malachite/malachite/code/crates/core-consensus" }
-          malachitebft-signing = { path = "/home/runner/work/malachite/malachite/code/crates/signing" }
-          bytes = "1"
-          rand = "0.8"
-          tokio = { version = "1", features = ["full"] }
-          EOF
-          
-          cp /tmp/test_t1.rs src/main.rs
           
           cargo build --release
           
