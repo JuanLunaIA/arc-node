@@ -39,10 +39,10 @@ jobs:
       - name: Build arc-signer
         run: cargo build -p arc-signer --lib --release
       
-      - name: Build malachite test dependencies
+      - name: Build malachite core dependencies
         run: |
           cd malachite/code
-          cargo build -p arc-malachitebft-core-types -p arc-malachitebft-core-consensus -p arc-malachitebft-core-votekeeper -p arc-malachitebft-engine --lib --release
+          cargo build -p arc-malachitebft-core-types -p arc-malachitebft-core-consensus -p arc-malachitebft-signing-ed25519 -p arc-malachitebft-signing -p arc-malachitebft-engine --lib --release
       
       - name: Run T-1 test - direct panic trigger
         run: |
@@ -60,11 +60,11 @@ jobs:
           
           [dependencies]
           arc-signer = { path = "/home/runner/work/arc-node/arc-node/crates/signer" }
-          arc-consensus-types = { path = "/home/runner/work/malachite/malachite/code/crates/types" }
-          malachitebft-core-types = { path = "/home/runner/work/malachite/malachite/code/crates/core-types" }
-          malachitebft-signing-ed25519 = { path = "/home/runner/work/malachite/malachite/code/crates/signing-ed25519" }
-          malachitebft-core-consensus = { path = "/home/runner/work/malachite/malachite/code/crates/core-consensus" }
-          malachitebft-signing = { path = "/home/runner/work/malachite/malachite/code/crates/signing" }
+          arc-consensus-types = { path = "/home/runner/work/arc-node/arc-node/crates/types" }
+          arc-malachitebft-core-types = { path = "/home/runner/work/malachite/malachite/code/crates/core-types" }
+          arc-malachitebft-signing-ed25519 = { path = "/home/runner/work/malachite/malachite/code/crates/signing-ed25519" }
+          arc-malachitebft-core-consensus = { path = "/home/runner/work/malachite/malachite/code/crates/core-consensus" }
+          arc-malachitebft-signing = { path = "/home/runner/work/malachite/malachite/code/crates/signing" }
           bytes = "1"
           rand = "0.8"
           tokio = { version = "1", features = ["full"] }
@@ -73,12 +73,11 @@ jobs:
           # Write the test source
           cat > src/main.rs << 'EOF'
           use arc_consensus_types::{ArcContext, VoteExtensionScope, Address, Height, ValueId, BlockHash};
-          use malachitebft_signing_ed25519::PrivateKey;
-          use malachitebft_signing::{Signer, Verifier};
+          use arc_malachitebft_signing_ed25519::PrivateKey;
+          use arc_malachitebft_signing::{Signer, Verifier};
           use bytes::Bytes;
-          use malachitebft_core_types::{Height, Round, ValueId, NilOrVal, VoteExtensionPolicy, HeightParams};
-          use malachitebft_signing_ed25519::Ed25519Signer;
-          use malachitebft_core_consensus::HeightParams;
+          use arc_malachitebft_core_types::{Height, Round, ValueId, NilOrVal, VoteExtensionPolicy, HeightParams};
+          use arc_malachitebft_core_consensus::HeightParams;
           use arc_signer::ArcSigningProvider;
           
           fn main() {
@@ -87,10 +86,10 @@ jobs:
               let provider = arc_signer::ArcSigningProvider::new(private_key);
               
               let scope = VoteExtensionScope::new(
-                  malachitebft_core_types::Height::new(7),
-                  malachitebft_core_types::Round::new(2),
-                  malachitebft_core_types::ValueId::new(malachitebft_core_types::BlockHash::repeat_byte(0xAB)),
-                  malachitebft_core_types::Address::repeat_byte(0x01),
+                  arc_malachitebft_core_types::Height::new(7),
+                  arc_malachitebft_core_types::Round::new(2),
+                  arc_malachitebft_core_types::ValueId::new(arc_malachitebft_core_types::BlockHash::repeat_byte(0xAB)),
+                  arc_malachitebft_core_types::Address::repeat_byte(0x01),
               );
               
               let extension = bytes::Bytes::from_static(b"test extension");
@@ -101,7 +100,7 @@ jobs:
               // This should panic with unreachable!
               let rt = tokio::runtime::Runtime::new().unwrap();
               let result = rt.block_on(async {
-                  provider.verify_signed_vote_extension(&scope, &extension, &malachitebft_signing_ed25519::Signature::default(), &pubkey).await
+                  provider.verify_signed_vote_extension(&scope, &extension, &arc_malachitebft_signing_ed25519::Signature::default(), &pubkey).await
               });
               
               println!("Result: {:?}", result);
